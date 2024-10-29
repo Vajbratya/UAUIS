@@ -3,7 +3,7 @@ import { useAppContext } from '../contexts/AppContext'
 import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
-import { Save, Download, Printer, Users, Tag, CornerUpLeft, CornerUpRight, Maximize2, Minimize2, Copy, Ruler, List, FileText, Brain, Lightbulb, Wand2 } from 'lucide-react'
+import { Save, Download, Printer, Users, Tag, CornerUpLeft, CornerUpRight, Maximize2, Minimize2, Copy, Ruler, List, FileText, Brain, Lightbulb, Wand2, HelpCircle } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useToast } from './ui/use-toast'
 import { generateClaudeResponse } from '../utils/claudeApi'
@@ -12,6 +12,8 @@ import TemplateManager from './TemplateManager'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
+import { findTriggerMatch } from '../utils/autoTexto'
+import { AutoTextoHelp } from './AutoTextoHelp'
 
 interface EditorProps {}
 
@@ -21,6 +23,7 @@ export function Editor({}: EditorProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isMeasurementManagerOpen, setIsMeasurementManagerOpen] = useState(false)
   const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false)
+  const [isAutoTextoHelpOpen, setIsAutoTextoHelpOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { toast } = useToast()
   const [previewContent, setPreviewContent] = useState<string>('')
@@ -32,10 +35,11 @@ export function Editor({}: EditorProps) {
   }, [content])
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setLocalContent(e.target.value)
-    setContent(e.target.value)
+    const newContent = e.target.value
+    setLocalContent(newContent)
+    setContent(newContent)
     // Calculate progress based on content length and structure
-    const progress = Math.min(Math.floor((e.target.value.length / 500) * 100), 100)
+    const progress = Math.min(Math.floor((newContent.length / 500) * 100), 100)
     setReportProgress(progress)
   }
 
@@ -53,14 +57,45 @@ export function Editor({}: EditorProps) {
           textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 2
         }
       }, 0)
+    } else if (e.key === ' ' || e.key === 'Enter') {
+      // Check for auto-texto triggers when space or enter is pressed
+      const textarea = textareaRef.current
+      if (textarea) {
+        const cursorPosition = textarea.selectionStart
+        const textBeforeCursor = textarea.value.substring(0, cursorPosition)
+        const words = textBeforeCursor.split(/\s+/)
+        const currentWord = words[words.length - 1]
+
+        // Check if the current word matches any auto-texto trigger
+        const matchingTrigger = findTriggerMatch(currentWord)
+
+        if (matchingTrigger) {
+          e.preventDefault()
+          // Replace the trigger word with the content
+          const textBeforeWord = textBeforeCursor.substring(0, textBeforeCursor.length - currentWord.length)
+          const textAfterCursor = textarea.value.substring(cursorPosition)
+          
+          const newContent = textBeforeWord + matchingTrigger.content + (e.key === 'Enter' ? '\n' : ' ') + textAfterCursor
+          setLocalContent(newContent)
+          setContent(newContent)
+
+          // Set cursor position after the inserted content
+          setTimeout(() => {
+            if (textareaRef.current) {
+              const newPosition = textBeforeWord.length + matchingTrigger.content.length + (e.key === 'Enter' ? 1 : 1)
+              textareaRef.current.selectionStart = textareaRef.current.selectionEnd = newPosition
+            }
+          }, 0)
+        }
+      }
     }
   }, [localContent, setContent])
 
   const handleTemplateInsert = useCallback((templateContent: string) => {
-    const newContent = content + '\n\n' + templateContent
-    setContent(newContent)
-    setLocalContent(newContent)
-  }, [content, setContent])
+    // Templates replace the entire content since they are complete reports
+    setContent(templateContent)
+    setLocalContent(templateContent)
+  }, [setContent])
 
   const handleGeneratePreview = useCallback(async () => {
     if (!localContent) return
@@ -88,11 +123,14 @@ export function Editor({}: EditorProps) {
           {/* Toolbar */}
           <div className="flex justify-between items-center mb-4 flex-shrink-0">
             <div className="flex items-center space-x-2">
-              <Button variant="outline" size="icon" onClick={() => setIsTemplateManagerOpen(true)}>
+              <Button variant="outline" size="icon" onClick={() => setIsTemplateManagerOpen(true)} title="Templates (Relatórios Completos)">
                 <List className="h-4 w-4" />
               </Button>
               <Button variant="outline" size="icon" onClick={() => setIsMeasurementManagerOpen(true)}>
                 <Ruler className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setIsAutoTextoHelpOpen(true)} title="Ajuda AutoTexto">
+                <HelpCircle className="h-4 w-4" />
               </Button>
             </div>
             <div className="flex items-center space-x-2">
@@ -115,7 +153,7 @@ export function Editor({}: EditorProps) {
                 onChange={handleContentChange}
                 onKeyDown={handleKeyDown}
                 className="w-full h-full resize-none font-mono"
-                placeholder="Comece a digitar seu relatório aqui..."
+                placeholder="Comece a digitar seu relatório aqui... (Use /n para 'normal', /p para 'preservado', /b para 'bilateral', etc)"
               />
             </TabsContent>
             <TabsContent value="preview" className="flex-1 min-h-0 h-0 overflow-auto">
@@ -162,6 +200,10 @@ export function Editor({}: EditorProps) {
         isOpen={isTemplateManagerOpen}
         onClose={() => setIsTemplateManagerOpen(false)}
         onInsertTemplate={handleTemplateInsert}
+      />
+      <AutoTextoHelp
+        isOpen={isAutoTextoHelpOpen}
+        onClose={() => setIsAutoTextoHelpOpen(false)}
       />
     </div>
   )
