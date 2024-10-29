@@ -2,11 +2,12 @@ import React, { useState, useCallback } from 'react'
 import { useAppContext } from '../contexts/AppContext'
 import { Button } from "./ui/button"
 import { ScrollArea } from "./ui/scroll-area"
-import { Brain, Lightbulb, FileText, Wand2, Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Copy } from 'lucide-react'
+import { Brain, Lightbulb, FileText, Wand2, Loader2, ChevronDown, ChevronUp, Copy, Send, Edit } from 'lucide-react'
 import { useToast } from "./ui/use-toast"
 import { generateClaudeResponse, generateFallbackResponse } from '../utils/claudeApi'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog"
 import { Card } from "./ui/card"
+import { Textarea } from "./ui/textarea"
 
 export function AIAssistant() {
   const { content, setContent } = useAppContext()
@@ -15,6 +16,9 @@ export function AIAssistant() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [lastAction, setLastAction] = useState('')
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editInstructions, setEditInstructions] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
   const { toast } = useToast()
 
   const handleAIAction = useCallback(async (action: string) => {
@@ -32,7 +36,11 @@ export function AIAssistant() {
     try {
       let response: string
       try {
-        response = await generateClaudeResponse(content, action)
+        if (isEditMode) {
+          response = await generateClaudeResponse(content, `${action} with following instructions: ${editInstructions}`)
+        } else {
+          response = await generateClaudeResponse(content, action)
+        }
       } catch (error) {
         console.error("Erro ao gerar resposta Claude:", error)
         response = generateFallbackResponse(action)
@@ -44,7 +52,7 @@ export function AIAssistant() {
       }
 
       setGeneratedContent(response)
-      setIsModalOpen(true)
+      setShowPreview(true)
       toast({
         title: "Ação de IA Concluída",
         description: `${action} foi realizada com sucesso.`,
@@ -59,20 +67,39 @@ export function AIAssistant() {
       })
     } finally {
       setIsProcessing(false)
+      setIsEditMode(false)
+      setEditInstructions('')
     }
-  }, [content, toast])
+  }, [content, toast, isEditMode, editInstructions])
 
-  const applyGeneratedContent = useCallback(() => {
-    const newContent = content + "\n\n" + generatedContent
-    setContent(newContent)
+  const handleTransferToEditor = useCallback(() => {
+    setContent(generatedContent)
     setGeneratedContent('')
-    setIsModalOpen(false)
+    setShowPreview(false)
     toast({
-      title: "Conteúdo Aplicado",
-      description: "O conteúdo gerado foi adicionado ao seu relatório.",
+      title: "Conteúdo Transferido",
+      description: "O conteúdo foi transferido para o editor.",
       variant: "default"
     })
-  }, [content, generatedContent, setContent, toast])
+  }, [generatedContent, setContent, toast])
+
+  const handleEditWithInstructions = useCallback(() => {
+    setIsEditMode(true)
+    setIsModalOpen(true)
+  }, [])
+
+  const handleReprocessWithInstructions = useCallback(() => {
+    if (!editInstructions.trim()) {
+      toast({
+        title: "Instruções Vazias",
+        description: "Por favor, insira instruções para reprocessamento.",
+        variant: "destructive"
+      })
+      return
+    }
+    setIsModalOpen(false)
+    handleAIAction(lastAction)
+  }, [editInstructions, handleAIAction, lastAction, toast])
 
   const copyToClipboard = useCallback(() => {
     navigator.clipboard.writeText(generatedContent)
@@ -101,56 +128,81 @@ export function AIAssistant() {
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="flex-shrink-0 space-y-2 mb-4">
-        <Button className="w-full justify-start" onClick={() => handleAIAction("Follow-up Recommendations")} disabled={isProcessing}>
+        <Button 
+          className="w-full justify-start font-medium bg-slate-700 hover:bg-slate-600 text-white shadow-sm" 
+          onClick={() => handleAIAction("Follow-up Recommendations")} 
+          disabled={isProcessing}
+        >
           <Brain className="h-5 w-5 mr-2" />
           Recomendações de Acompanhamento
         </Button>
-        <Button className="w-full justify-start" onClick={() => handleAIAction("Generate Impressions")} disabled={isProcessing}>
+        <Button 
+          className="w-full justify-start font-medium bg-stone-700 hover:bg-stone-600 text-white shadow-sm" 
+          onClick={() => handleAIAction("Generate Impressions")} 
+          disabled={isProcessing}
+        >
           <Lightbulb className="h-5 w-5 mr-2" />
           Gerar Impressões
         </Button>
-        <Button className="w-full justify-start" onClick={() => handleAIAction("Generate Report")} disabled={isProcessing}>
+        <Button 
+          className="w-full justify-start font-medium bg-neutral-700 hover:bg-neutral-600 text-white shadow-sm" 
+          onClick={() => handleAIAction("Generate Report")} 
+          disabled={isProcessing}
+        >
           <FileText className="h-5 w-5 mr-2" />
           Gerar Relatório
         </Button>
-        <Button className="w-full justify-start" onClick={() => handleAIAction("Enhance Report")} disabled={isProcessing}>
+        <Button 
+          className="w-full justify-start font-medium bg-zinc-700 hover:bg-zinc-600 text-white shadow-sm" 
+          onClick={() => handleAIAction("Enhance Report")} 
+          disabled={isProcessing}
+        >
           <Wand2 className="h-5 w-5 mr-2" />
           Aprimorar Relatório
         </Button>
       </div>
+
       <ScrollArea className="flex-1 min-h-0">
         {isProcessing && (
           <div className="flex items-center justify-center p-4 bg-muted rounded-md">
             <Loader2 className="h-6 w-6 animate-spin mr-2" />
-            <span>Processando sua solicitação...</span>
+            <span className="font-medium">Processando sua solicitação...</span>
           </div>
         )}
-        {generatedContent && !isModalOpen && (
-          <Card className="p-4 mt-4 cursor-pointer hover:bg-accent" onClick={() => setIsModalOpen(true)}>
-            <h3 className="font-semibold mb-2">{getActionTitle(lastAction)}</h3>
-            <p className="text-sm text-muted-foreground line-clamp-3">
-              {generatedContent}
-            </p>
-            <div className="flex justify-end mt-2">
-              <Button variant="ghost" size="sm">
-                <ChevronDown className="h-4 w-4" />
-                Expandir
-              </Button>
+
+        {showPreview && generatedContent && (
+          <Card className="p-4 mt-4 border-2 shadow-lg max-w-[600px] mx-auto">
+            <div className="flex flex-col space-y-4 mb-4">
+              <h3 className="text-xl font-bold text-foreground">{getActionTitle(lastAction)} - Prévia</h3>
+              <div className="flex flex-col space-y-2">
+                <Button 
+                  onClick={handleTransferToEditor} 
+                  className="w-full font-medium bg-slate-700 hover:bg-slate-600 text-white justify-center shadow-sm"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Transferir para Editor
+                </Button>
+                <Button 
+                  onClick={handleEditWithInstructions} 
+                  className="w-full font-medium bg-stone-700 hover:bg-stone-600 text-white justify-center shadow-sm"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar com Instruções
+                </Button>
+              </div>
             </div>
-          </Card>
-        )}
-      </ScrollArea>
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{getActionTitle(lastAction)}</DialogTitle>
-          </DialogHeader>
-          <div className="mt-4">
-            <ScrollArea className={`border rounded-md p-4 ${isExpanded ? 'h-[60vh]' : 'h-64'}`}>
-              <div className="whitespace-pre-wrap">{generatedContent}</div>
-            </ScrollArea>
-            <div className="mt-2 flex justify-between items-center">
-              <Button variant="outline" onClick={() => setIsExpanded(!isExpanded)}>
+
+            <div className={`border-2 rounded-md p-4 ${isExpanded ? 'h-[60vh]' : 'h-64'} bg-card overflow-auto`}>
+              <div className="whitespace-pre-wrap text-foreground font-medium leading-relaxed">
+                {generatedContent}
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-between items-center">
+              <Button 
+                className="font-medium bg-neutral-700 hover:bg-neutral-600 text-white shadow-sm"
+                onClick={() => setIsExpanded(!isExpanded)}
+              >
                 {isExpanded ? (
                   <>
                     <ChevronUp className="h-4 w-4 mr-2" />
@@ -163,15 +215,43 @@ export function AIAssistant() {
                   </>
                 )}
               </Button>
-              <div className="space-x-2">
-                <Button onClick={copyToClipboard}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copiar
-                </Button>
-                <Button onClick={applyGeneratedContent}>
-                  Aplicar ao Relatório
-                </Button>
-              </div>
+              <Button 
+                onClick={copyToClipboard}
+                className="font-medium bg-zinc-700 hover:bg-zinc-600 text-white shadow-sm"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copiar
+              </Button>
+            </div>
+          </Card>
+        )}
+      </ScrollArea>
+
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Instruções para Reprocessamento</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <Textarea
+              placeholder="Digite suas instruções para o reprocessamento do relatório..."
+              value={editInstructions}
+              onChange={(e) => setEditInstructions(e.target.value)}
+              className="min-h-[200px] text-base font-medium"
+            />
+            <div className="mt-4 flex justify-end space-x-2">
+              <Button 
+                className="font-medium bg-neutral-700 hover:bg-neutral-600 text-white shadow-sm"
+                onClick={() => setIsModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleReprocessWithInstructions}
+                className="font-medium bg-slate-700 hover:bg-slate-600 text-white shadow-sm"
+              >
+                Reprocessar
+              </Button>
             </div>
           </div>
         </DialogContent>
