@@ -63,6 +63,7 @@ export interface Template {
   type: 'normal' | 'findings' | 'emergency'
   sections: TemplateSection[]
   tags: string[]
+  shortcut?: string // Added shortcut property
   isCustom?: boolean
   userId?: string
   user?: User

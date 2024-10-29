@@ -1,34 +1,37 @@
-import React from 'react'
-import { ThemeProvider } from './components/ThemeProvider'
-import { Header } from './components/Header'
-import { Sidebar } from './components/Sidebar'
-import { Editor } from './components/Editor'
-import { Footer } from './components/Footer'
-import { AIAssistant } from './components/AIAssistant'
-import { Toaster } from './components/ui/toaster'
-import { AppContextProvider } from './contexts/AppContext'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from './components/ThemeProvider';
+import { Toaster } from './components/ui/toaster';
+import { LandingPage } from './pages/LandingPage';
+import { Dashboard } from './pages/Dashboard';
+import { Editor } from './components/Editor';
+import { AIAssistant } from './components/AIAssistant';
 
-export function App() {
+function App() {
+  // TODO: Replace with actual auth check
+  const isAuthenticated = false;
+
   return (
-    <AppContextProvider>
-      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden">
-          <Header />
-          <div className="flex-1 flex min-h-0">
-            <Sidebar />
-            <main className="flex-1 p-4 flex min-h-0">
-              <div className="flex-grow mr-4 min-h-0">
-                <Editor />
-              </div>
-              <div className="w-64 min-h-0">
-                <AIAssistant />
-              </div>
-            </main>
-          </div>
-          <Footer />
-        </div>
-        <Toaster />
-      </ThemeProvider>
-    </AppContextProvider>
-  )
+    <ThemeProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/dashboard"
+            element={isAuthenticated ? <Dashboard /> : <Navigate to="/" />}
+          />
+          <Route
+            path="/editor"
+            element={isAuthenticated ? <Editor /> : <Navigate to="/" />}
+          />
+          <Route
+            path="/ai-assistant"
+            element={isAuthenticated ? <AIAssistant /> : <Navigate to="/" />}
+          />
+        </Routes>
+      </Router>
+      <Toaster />
+    </ThemeProvider>
+  );
 }
+
+export default App;

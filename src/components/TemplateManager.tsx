@@ -103,60 +103,36 @@ export default function TemplateManager({
     setDynamicValues(initialValues)
   }
 
-  const handleDynamicFieldChange = (fieldId: string, value: any) => {
-    setDynamicValues(prev => {
-      const updated = {
-        ...prev,
-        [fieldId]: value
-      }
-      if (selectedTemplate) {
-        localStorage.setItem(
-          `${STORAGE_KEY}-${selectedTemplate.id}`,
-          JSON.stringify(updated)
-        )
-      }
-      return updated
-    })
-  }
+  const handleDynamicFieldChange = useCallback((fieldId: string, value: any) => {
+    setDynamicValues(prev => ({
+      ...prev,
+      [fieldId]: value
+    }))
+  }, [])
 
   const processTemplate = (template: Template): string => {
-    let result = ''
-    
-    // Add header with template info
-    result += `${template.name}\n`
-    result += `${'-'.repeat(template.name.length)}\n\n`
-    
-    // Process each section
-    template.sections.forEach(section => {
-      if (!section.isOptional || dynamicValues[`section_${section.id}_enabled`]) {
-        let sectionContent = section.content
-
-        // Replace dynamic field placeholders
-        section.dynamicFields?.forEach(field => {
+    return template.sections.map(section => {
+      let content = section.content
+      if (section.dynamicFields) {
+        section.dynamicFields.forEach(field => {
           const value = dynamicValues[field.id]
           if (value !== undefined) {
-            const placeholder = `{${field.name}}`
-            const displayValue = field.type === 'measurement' 
-              ? `${value}${field.unit || ''}`
-              : value.toString()
-            sectionContent = sectionContent.replace(placeholder, displayValue)
+            const placeholder = `{${field.id}}`
+            content = content.replace(placeholder, value)
           }
         })
-
-        result += `${section.title}:\n${sectionContent}\n\n`
       }
-    })
-
-    return result.trim()
+      return `${section.title}\n${content}`
+    }).join('\n\n')
   }
 
-  const handleInsert = () => {
-    if (selectedTemplate) {
-      const processedContent = processTemplate(selectedTemplate)
-      onInsertTemplate(processedContent)
-      onClose()
-    }
-  }
+  const handleInsert = useCallback(() => {
+    if (!selectedTemplate) return
+    
+    const processedContent = processTemplate(selectedTemplate)
+    onInsertTemplate(processedContent)
+    onClose()
+  }, [selectedTemplate, dynamicValues, onInsertTemplate, onClose])
 
   const handleCreateTemplate = () => {
     if (!newTemplate.name || !newTemplate.description || !newTemplate.bodyPart) {
